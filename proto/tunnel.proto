@@ -1,0 +1,10 @@
+syntax = "proto3";
+package tunnel;
+
+service Greeter {
+  rpc Tunnel(stream Data) returns (stream Data) {}
+}
+
+message Data {
+    bytes data = 1;
+}

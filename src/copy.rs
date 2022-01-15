@@ -103,16 +103,16 @@ impl Stream for StreamReaderCopy {
                 if n == 0 {
                     return Poll::Ready(None);
                 }
-                return Poll::Ready(Some(Ok(Data {
+                Poll::Ready(Some(Ok(Data {
                     data: me.buf[..n].to_vec(),
-                })));
+                })))
             }
             Err(err) => {
                 log::error!("stream poll_read err: {:?}", err);
-                return Poll::Ready(Some(Err(Status::internal(format!(
+                Poll::Ready(Some(Err(Status::internal(format!(
                     "stream poll_read err: {:?}",
                     err
-                )))));
+                )))))
             }
         }
     }

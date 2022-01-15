@@ -1,4 +1,5 @@
 use std::io;
+use std::time::Duration;
 
 use futures_util::StreamExt;
 use gtunnel::args::parse_args;
@@ -20,6 +21,7 @@ async fn main() -> io::Result<()> {
     let channel = Channel::builder(config.remote_addr.parse().unwrap())
         .initial_connection_window_size(DEFAULT_CONN_WINDOW)
         .initial_stream_window_size(DEFAULT_STREAM_WINDOW)
+        .connect_timeout(Duration::from_secs(3))
         .connect()
         .await
         .unwrap();
@@ -28,36 +30,25 @@ async fn main() -> io::Result<()> {
     loop {
         let (stream, addr) = listener.accept().await?;
         log::debug!("accept tcp from {:?}", addr);
-        proxy(stream, client.clone());
+        let client = client.clone();
+        tokio::spawn(async move {
+            proxy(stream, client).await;
+        });
     }
 }
 
-fn proxy(stream: TcpStream, mut client: TunnelClient<Channel>) {
-    tokio::spawn(async move {
-        let (reader, writer) = stream.into_split();
-        let mut send_stream = stream_reader_copy(reader);
-        let req = async_stream::stream! {
-            while let Some(item) = send_stream.next().await {
-                match item {
-                    Ok(v) => {
-                        yield v;
-                    }
-                    Err(_) => {
-                        break;
-                    }
-                }
-            }
-        };
+async fn proxy(stream: TcpStream, mut client: TunnelClient<Channel>) {
+    let (reader, writer) = stream.into_split();
+    let send_stream = stream_reader_copy(reader).filter_map(|v| async { v.ok() });
 
-        match client.tunnel(req).await {
-            Ok(response) => {
-                if let Err(e) = stream_writer_copy(writer, response.into_inner()).await {
-                    log::error!("recv stream err: {:?}", e);
-                }
-            }
-            Err(err) => {
-                log::error!("grpc tunnel err: {:?}", err);
+    match client.tunnel(send_stream).await {
+        Ok(response) => {
+            if let Err(e) = stream_writer_copy(writer, response.into_inner()).await {
+                log::error!("recv stream err: {:?}", e);
             }
         }
-    });
+        Err(err) => {
+            log::error!("grpc tunnel err: {:?}", err);
+        }
+    }
 }

@@ -12,9 +12,6 @@ use crate::other;
 pub struct Config {
     pub local_addr: String,
     pub remote_addr: String,
-    pub ca_certificate: String,
-    pub server_cert: String,
-    pub server_key: String,
 }
 
 impl Config {

@@ -6,15 +6,14 @@ use std::time::Duration;
 
 use futures_util::Stream;
 use gtunnel::args::parse_args;
-use gtunnel::copy::stream_writer_copy;
+use gtunnel::copy::{stream_reader_copy, stream_writer_copy};
 use gtunnel::pb::{
     tunnel_server::{self, Tunnel},
     Data,
 };
 use tokio::net::TcpStream;
 use tokio::time::timeout;
-use tonic::{transport::Server, Request, Response, Status};
-use tonic::{Code, Streaming};
+use tonic::{transport::Server, Request, Response, Status, Streaming};
 
 pub const CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
 
@@ -35,17 +34,22 @@ impl Tunnel for TunnelServer {
                 Ok(stream) => Ok(stream),
                 Err(e) => {
                     log::error!("connect to {} err {:?}", &addr, e);
-                    Err(Status::new(Code::Internal, e.to_string()))
+                    Err(Status::internal(e.to_string()))
                 }
             },
             Err(e) => {
                 log::error!("connect to {} err {:?}", &addr, e);
-                Err(Status::new(Code::Internal, e.to_string()))
+                Err(Status::internal(e.to_string()))
             }
         }?;
+
         let (reader, writer) = stream.into_split();
-        stream_writer_copy(writer, req.into_inner()).await;
-        unimplemented!()
+        tokio::spawn(async move {
+            if let Err(e) = stream_writer_copy(writer, req.into_inner()).await {
+                log::error!("recv stream err: {:?}", e);
+            }
+        });
+        Ok(Response::new(Box::pin(stream_reader_copy(reader))))
     }
 }
 

@@ -6,7 +6,7 @@ use std::task::{Context, Poll};
 use futures_util::Stream;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
-use tonic::Streaming;
+use tonic::{Status, Streaming};
 
 use crate::other;
 use crate::pb::Data;
@@ -79,13 +79,20 @@ impl Future for StreamWriterCopy {
     }
 }
 
-struct StreamReaderCopy {
+pub fn stream_reader_copy(reader: OwnedReadHalf) -> StreamReaderCopy {
+    StreamReaderCopy {
+        reader,
+        buf: vec![0u8; 2048],
+    }
+}
+
+pub struct StreamReaderCopy {
     reader: OwnedReadHalf,
     buf: Vec<u8>,
 }
 
 impl Stream for StreamReaderCopy {
-    type Item = Data;
+    type Item = Result<Data, Status>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         let me = &mut *self;
@@ -96,13 +103,16 @@ impl Stream for StreamReaderCopy {
                 if n == 0 {
                     return Poll::Ready(None);
                 }
-                return Poll::Ready(Some(Data {
+                return Poll::Ready(Some(Ok(Data {
                     data: me.buf[..n].to_vec(),
-                }));
+                })));
             }
             Err(err) => {
                 log::error!("stream poll_read err: {:?}", err);
-                return Poll::Ready(None);
+                return Poll::Ready(Some(Err(Status::internal(format!(
+                    "stream poll_read err: {:?}",
+                    err
+                )))));
             }
         }
     }

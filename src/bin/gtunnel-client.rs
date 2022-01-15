@@ -22,9 +22,7 @@ async fn main() -> io::Result<()> {
         .initial_connection_window_size(DEFAULT_CONN_WINDOW)
         .initial_stream_window_size(DEFAULT_STREAM_WINDOW)
         .connect_timeout(Duration::from_secs(3))
-        .connect()
-        .await
-        .unwrap();
+        .connect_lazy();
     let client = TunnelClient::new(channel);
 
     loop {

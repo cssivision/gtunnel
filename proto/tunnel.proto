@@ -1,7 +1,7 @@
 syntax = "proto3";
 package tunnel;
 
-service Greeter {
+service Tunnel {
   rpc Tunnel(stream Data) returns (stream Data) {}
 }
 

@@ -1,77 +1,17 @@
-macro_rules! ready {
-    ($e:expr $(,)?) => {
-        match $e {
-            std::task::Poll::Ready(t) => t,
-            std::task::Poll::Pending => return std::task::Poll::Pending,
-        }
-    };
-}
-
 use std::future::Future;
 use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use futures_util::Stream;
-use gtunnel::args::parse_args;
-use gtunnel::other;
-use gtunnel::pb::{tunnel_client::TunnelClient, Data};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
-use tokio::net::TcpListener;
-use tonic::transport::Channel;
 use tonic::Streaming;
 
-#[tokio::main]
-async fn main() -> io::Result<()> {
-    env_logger::init();
-    let config = parse_args("gtunnel-client").expect("invalid config");
-    log::info!("{}", serde_json::to_string_pretty(&config).unwrap());
+use crate::other;
+use crate::pb::Data;
 
-    let listener = TcpListener::bind(&config.local_addr).await?;
-    let channel = Channel::builder(config.remote_addr.parse().unwrap())
-        .connect()
-        .await
-        .unwrap();
-    let grpc_client = TunnelClient::new(channel);
-
-    loop {
-        match listener.accept().await {
-            Ok((stream, addr)) => {
-                log::debug!("accept tcp from {:?}", addr);
-                let mut grpc_client = grpc_client.clone();
-                tokio::spawn(async move {
-                    let (reader, writer) = stream.into_split();
-                    let send_stream = stream_reader_copy(reader);
-                    match grpc_client.tunnel(send_stream).await {
-                        Ok(response) => {
-                            let inbound = response.into_inner();
-                            let recv_stream = stream_writer_copy(writer, inbound);
-                            if let Err(e) = recv_stream.await {
-                                log::error!("recv stream err: {:?}", e);
-                            }
-                        }
-                        Err(err) => {
-                            log::error!("grpc tunnel err: {:?}", err);
-                        }
-                    }
-                });
-            }
-            Err(e) => {
-                log::error!("accept fail: {:?}", e);
-            }
-        }
-    }
-}
-
-fn stream_reader_copy(reader: OwnedReadHalf) -> StreamReaderCopy {
-    StreamReaderCopy {
-        reader,
-        buf: vec![0u8; 2048],
-    }
-}
-
-fn stream_writer_copy(writer: OwnedWriteHalf, stream: Streaming<Data>) -> StreamWriterCopy {
+pub fn stream_writer_copy(writer: OwnedWriteHalf, stream: Streaming<Data>) -> StreamWriterCopy {
     StreamWriterCopy {
         writer,
         stream,
@@ -83,7 +23,7 @@ fn stream_writer_copy(writer: OwnedWriteHalf, stream: Streaming<Data>) -> Stream
     }
 }
 
-struct StreamWriterCopy {
+pub struct StreamWriterCopy {
     writer: OwnedWriteHalf,
     stream: Streaming<Data>,
     buf: Vec<u8>,

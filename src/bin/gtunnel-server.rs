@@ -68,8 +68,11 @@ async fn main() -> io::Result<()> {
         remote_addrs: cfg.remote_socket_addrs(),
         next: AtomicUsize::new(0),
     };
+    let service = tunnel_server::TunnelServer::new(server)
+        .accept_gzip()
+        .send_gzip();
     Server::builder()
-        .add_service(tunnel_server::TunnelServer::new(server))
+        .add_service(service)
         .serve(cfg.local_addr.parse().unwrap())
         .await
         .unwrap();

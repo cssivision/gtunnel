@@ -23,7 +23,7 @@ async fn main() -> io::Result<()> {
         .initial_stream_window_size(DEFAULT_STREAM_WINDOW)
         .connect_timeout(Duration::from_secs(3))
         .connect_lazy();
-    let client = TunnelClient::new(channel);
+    let client = TunnelClient::new(channel).accept_gzip().send_gzip();
 
     loop {
         let (stream, addr) = listener.accept().await?;
